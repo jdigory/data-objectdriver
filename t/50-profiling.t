@@ -63,12 +63,12 @@ is $stats->{'DBI:query_insert'}, 1;
 my $log = $profiler->query_log;
 isa_ok $log, 'ARRAY';
 is scalar(@$log), 1;
-like $log->[0], qr/^\s*INSERT INTO recipe/;
+like $log->[0], qr/^\s*INSERT INTO "recipes"/;
 
 my $frequent = $profiler->query_frequency;
 isa_ok $frequent, 'HASH';
 my $sql = (keys %$frequent)[0];
-like $sql, qr/^\s*INSERT INTO recipe/;
+like $sql, qr/^\s*INSERT INTO "recipes"/;
 is $frequent->{$sql}, 1;
 
 Data::ObjectDriver->profiler->reset;
@@ -94,7 +94,7 @@ $recipe->title('Flan');
 $recipe->save;
 
 $frequent = $profiler->query_frequency;
-is $frequent->{"SELECT 1 FROM recipes WHERE (recipes.recipe_id = ?)"}, 2;
+is $frequent->{'SELECT 1 FROM recipes WHERE ("recipes"."recipe_id" = ?)'}, 2;
 
 is $profiler->total_queries, 5;
 
