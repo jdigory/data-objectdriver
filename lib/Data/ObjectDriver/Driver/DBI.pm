@@ -374,15 +374,15 @@ sub _insert_or_replace {
             $cols = [ grep !$pk{$_} || defined $obj->$_(), @$cols ];
         }
     }
-    my $tbl = $driver->table_for($obj);
+    my $dbh = $driver->rw_handle($obj->properties->{db});
+    my $tbl = $dbh->quote_identifier( $driver->table_for($obj) );
     my $sql = "$INSERT_OR_REPLACE INTO $tbl\n";
     my $dbd = $driver->dbd;
     $sql .= '(' . join(', ',
-                  map { $dbd->db_column_name($tbl, $_) }
+                  map { $dbh->quote_identifier( $dbd->db_column_name($tbl, $_) ) }
                   @$cols) .
             ')' . "\n" .
             'VALUES (' . join(', ', ('?') x @$cols) . ')' . "\n";
-    my $dbh = $driver->rw_handle($obj->properties->{db});
     $driver->start_query($sql, $obj->{column_values});
     my $sth = $driver->_prepare_cached($dbh, $sql);
     my $i = 1;
@@ -518,11 +518,11 @@ sub remove {
     my $obj = $orig_obj->clone_all;
     $obj->call_trigger('pre_remove', $orig_obj);
 
-    my $tbl = $driver->table_for($obj);
+    my $dbh = $driver->rw_handle($obj->properties->{db});
+    my $tbl = $dbh->quote_identifier( $driver->table_for($obj) );
     my $sql = "DELETE FROM $tbl\n";
     my $stmt = $driver->prepare_statement(ref($obj), $obj->primary_key_to_terms);
     $sql .= $stmt->as_sql_where;
-    my $dbh = $driver->rw_handle($obj->properties->{db});
     $driver->start_query($sql, $stmt->{bind});
     my $sth = $driver->_prepare_cached($dbh, $sql);
     my $result = $sth->execute(@{ $stmt->{bind} });
@@ -677,7 +677,9 @@ sub prepare_statement {
     my($class, $terms, $args) = @_;
 
     my $dbd = $driver->dbd;
+    my $dbh = $driver->dbh || $driver->rw_handle($class->properties->{db});
     my $stmt = $args->{sql_statement} || $dbd->sql_class->new;
+    $stmt->dbh($dbh);
 
     if (my $tbl = $driver->table_for($class)) {
         my $cols = $class->column_names;
@@ -689,7 +691,8 @@ sub prepare_statement {
             if (keys %fetch) {
                 next unless $fetch{$col};
             }
-            my $dbcol = join '.', $tbl, $dbd->db_column_name($tbl, $col);
+            my $dbcol = join '.', $dbh->quote_identifier($tbl),
+              $dbh->quote_identifier( $dbd->db_column_name( $tbl, $col ) );
             $stmt->add_select($dbcol => $col);
         }
 

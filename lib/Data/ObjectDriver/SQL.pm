@@ -10,7 +10,7 @@ __PACKAGE__->mk_accessors(qw(
     select distinct select_map select_map_reverse
     from joins where bind limit offset group order
     having where_values column_mutator index_hint
-    comment
+    comment dbh
 ));
 
 sub new {
@@ -65,7 +65,9 @@ sub as_sql {
         $sql .= 'DISTINCT ' if $stmt->distinct;
         $sql .= join(', ',  map {
             my $alias = $stmt->select_map->{$_};
-            $alias && /(?:^|\.)\Q$alias\E$/ ? $_ : "$_ $alias";
+            $alias && /(?:^|\.)\Q$alias\E$/
+              ? $_
+              : $_ . ' ' . $stmt->_quote_identifier($alias);
         } @{ $stmt->select }) . "\n";
     }
     $sql .= 'FROM ';
@@ -260,6 +262,14 @@ sub _mk_term {
         $term = "$col $$val";
     } else {
         $col = $m->($col) if $m = $stmt->column_mutator;
+        if ( $col =~ /\./ ) {
+            my ( $t, $c ) = split /\./, $col;
+            $col = join '.', $stmt->_quote_identifier($t),
+              $stmt->_quote_identifier($c);
+        }
+        else {
+            $col = $stmt->_quote_identifier($col);
+        }
         $term = "$col = ?";
         push @bind, $val;
     }
@@ -270,13 +280,21 @@ sub _add_index_hint {
     my $stmt = shift;
     my ($tbl_name) = @_;
     my $hint = $stmt->index_hint->{$tbl_name};
-    return $tbl_name unless $hint && ref($hint) eq 'HASH';
+    return $stmt->_quote_identifier($tbl_name) unless $hint && ref($hint) eq 'HASH';
     if ($hint->{list} && @{ $hint->{list} }) {
         return $tbl_name . ' ' . uc($hint->{type} || 'USE') . ' INDEX (' .
                 join (',', @{ $hint->{list} }) .
                 ')';
     }
     return $tbl_name;
+}
+
+sub _quote_identifier {
+    my $stmt = shift;
+    my $term = shift;
+    return ( ref $stmt->dbh and $stmt->dbh->can('quote_identifier') )
+      ? $stmt->dbh->quote_identifier($term)
+      : $term;
 }
 
 1;
