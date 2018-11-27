@@ -1,0 +1,4 @@
+CREATE TABLE 'select' (
+  'id' INTEGER NOT NULL PRIMARY KEY,
+  'select' VARCHAR(50)
+)
